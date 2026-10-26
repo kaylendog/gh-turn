@@ -2,7 +2,10 @@ module github.com/kaylendog/gh-turn
 
 go 1.26.7
 
-require github.com/cli/go-gh/v2 v2.17.0
+require (
+	github.com/alecthomas/kong v1.16.1
+	github.com/cli/go-gh/v2 v2.17.0
+)
 
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect

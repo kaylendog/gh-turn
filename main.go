@@ -2,12 +2,15 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alecthomas/kong"
 
 	"github.com/kaylendog/gh-turn/internal/classify"
 	"github.com/kaylendog/gh-turn/internal/github"
@@ -39,32 +42,55 @@ var sections = []struct {
 	{classify.Draft, "Your drafts", "90"},
 }
 
-func main() {
-	tsv := flag.Bool("tsv", false, "print tab-separated rows instead of a report")
-	limit := flag.Int("limit", 50, "maximum pull requests to fetch per search")
-	showVersion := flag.Bool("version", false, "print the version and exit")
-	flag.Parse()
+// CLI is the command line, as kong reads it.
+type CLI struct {
+	State []classify.Bucket `help:"Only show these buckets, comma separated: ${enum}." sep:"," enum:"review,rereview,yours,merge,theirs,draft" optional:""`
 
-	if *showVersion {
-		fmt.Println(version)
-		return
-	}
+	After  When `help:"Only pull requests touched since this date or age." default:"6mo"`
+	Before When `help:"Only pull requests untouched since this date or age." optional:""`
 
-	if err := run(*tsv, *limit); err != nil {
-		fmt.Fprintln(os.Stderr, "gh turn:", err)
-		os.Exit(1)
-	}
+	Limit int  `help:"Most pull requests to ask for per search." default:"50"`
+	TSV   bool `name:"tsv" help:"Print tab separated rows instead of a report."`
+
+	Version kong.VersionFlag `help:"Print the version and exit."`
 }
 
-func run(tsv bool, limit int) error {
-	// GitHub caps a search page at 100; without this the API rejects the
-	// query with a message that says nothing about --limit.
-	if limit < 1 || limit > 100 {
-		return fmt.Errorf("--limit must be between 1 and 100, got %d", limit)
+// Validate is called by kong once the flags are populated.
+func (c CLI) Validate() error {
+	// GitHub caps a search page at 100, and rejects more with a message that
+	// says nothing about --limit.
+	if c.Limit < 1 || c.Limit > 100 {
+		return fmt.Errorf("--limit must be between 1 and 100, got %d", c.Limit)
 	}
+	if !c.Before.IsZero() && !c.After.IsZero() && c.Before.Before(c.After.Time) {
+		return fmt.Errorf("--before %s is earlier than --after %s, which matches nothing",
+			c.Before.Format(time.DateOnly), c.After.Format(time.DateOnly))
+	}
+	return nil
+}
 
+// wants reports whether a bucket survives --state. No --state means all of them.
+func (c CLI) wants(bucket classify.Bucket) bool {
+	return len(c.State) == 0 || slices.Contains(c.State, bucket)
+}
+
+func main() {
+	var cli CLI
+	ctx := kong.Parse(&cli,
+		kong.Name("gh turn"),
+		kong.Description("Sort your open pull requests by whose move it actually is."),
+		kong.Vars{"version": version},
+	)
+	ctx.FatalIfErrorf(run(cli))
+}
+
+func run(cli CLI) error {
 	progress := newProgress()
-	response, err := github.Fetch(limit, progress.update)
+	response, err := github.Fetch(github.Options{
+		Limit:  cli.Limit,
+		After:  cli.After.Time,
+		Before: cli.Before.Time,
+	}, progress.update)
 	progress.clear()
 	if err != nil {
 		return err
@@ -72,19 +98,68 @@ func run(tsv bool, limit int) error {
 	me := response.Login
 
 	rows := make([]row, 0, len(response.Authored)+len(response.Requested))
+	add := func(pr classify.PullRequest, verdict classify.Verdict) {
+		if cli.wants(verdict.Bucket) {
+			rows = append(rows, newRow(pr, verdict))
+		}
+	}
 	for _, pr := range response.Authored {
-		rows = append(rows, newRow(pr, classify.Authored(pr, me)))
+		add(pr, classify.Authored(pr, me))
 	}
 	for _, pr := range response.Requested {
-		rows = append(rows, newRow(pr, classify.Requested(pr, me)))
+		add(pr, classify.Requested(pr, me))
 	}
 
-	if tsv {
+	if cli.TSV {
 		printTSV(rows)
 		return nil
 	}
 	printReport(rows, colourEnabled())
 	return nil
+}
+
+// When is a moment given either as a date (2026-01-31) or as an age counted
+// back from now (6mo, 3w, 90d, 1y). Kong calls UnmarshalText for it, so a bad
+// value is reported against the flag that carried it.
+type When struct{ time.Time }
+
+var ages = []struct {
+	suffix string
+	back   func(time.Time, int) time.Time
+}{
+	{"mo", func(t time.Time, n int) time.Time { return t.AddDate(0, -n, 0) }},
+	{"y", func(t time.Time, n int) time.Time { return t.AddDate(-n, 0, 0) }},
+	{"w", func(t time.Time, n int) time.Time { return t.AddDate(0, 0, -7*n) }},
+	{"d", func(t time.Time, n int) time.Time { return t.AddDate(0, 0, -n) }},
+}
+
+func (w *When) UnmarshalText(text []byte) error {
+	return w.parse(string(text), time.Now())
+}
+
+func (w *When) parse(value string, now time.Time) error {
+	if value == "" {
+		w.Time = time.Time{}
+		return nil
+	}
+	if date, err := time.Parse(time.DateOnly, value); err == nil {
+		w.Time = date
+		return nil
+	}
+	// Longest suffix first, so "mo" is never read as a bare "o".
+	for _, age := range ages {
+		digits, found := strings.CutSuffix(value, age.suffix)
+		if !found {
+			continue
+		}
+		n, err := strconv.Atoi(digits)
+		if err != nil || n < 0 {
+			break
+		}
+		w.Time = age.back(now, n)
+		return nil
+	}
+	return fmt.Errorf("want a date like 2026-01-31 or an age like 6mo, 3w, 90d or 1y, got %q", value)
 }
 
 func newRow(pr classify.PullRequest, verdict classify.Verdict) row {

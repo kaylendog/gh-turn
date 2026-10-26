@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 
@@ -44,11 +45,13 @@ query($requested: String!, $limit: Int!) {
     login
     pullRequests(states: OPEN, first: $limit,
                  orderBy: {field: UPDATED_AT, direction: DESC}) {
-      nodes { id number repository { nameWithOwner isArchived } }
+      nodes { id number updatedAt repository { nameWithOwner isArchived } }
     }
   }
   requested: search(query: $requested, type: ISSUE, first: $limit) {
-    nodes { ... on PullRequest { id number repository { nameWithOwner } } }
+    nodes { ... on PullRequest {
+      id number updatedAt repository { nameWithOwner }
+    }}
   }
 }`
 
@@ -78,12 +81,32 @@ type Ref struct {
 }
 
 type listNode struct {
-	ID         string `json:"id"`
-	Number     int    `json:"number"`
+	ID         string    `json:"id"`
+	Number     int       `json:"number"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 	Repository struct {
 		NameWithOwner string `json:"nameWithOwner"`
 		IsArchived    bool   `json:"isArchived"`
 	} `json:"repository"`
+}
+
+// Options bounds what Fetch asks for. Filtering by date happens in the first
+// pass, so anything excluded never costs a timeline fetch.
+type Options struct {
+	Limit  int
+	After  time.Time // zero means no lower bound
+	Before time.Time // zero means no upper bound
+}
+
+// wanted reports whether a pull request's last activity falls in range.
+func (o Options) wanted(n listNode) bool {
+	if !o.After.IsZero() && n.UpdatedAt.Before(o.After) {
+		return false
+	}
+	if !o.Before.IsZero() && n.UpdatedAt.After(o.Before) {
+		return false
+	}
+	return true
 }
 
 // Progress is called whenever a batch starts or finishes, naming the pull
@@ -100,13 +123,13 @@ type Response struct {
 }
 
 // Fetch returns your open pull requests alongside those awaiting your review.
-func Fetch(limit int, progress Progress) (*Response, error) {
+func Fetch(opts Options, progress Progress) (*Response, error) {
 	client, err := api.DefaultGraphQLClient()
 	if err != nil {
 		return nil, fmt.Errorf("connecting to GitHub: %w", err)
 	}
 
-	login, authored, requested, err := list(client, limit)
+	login, authored, requested, err := list(client, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +150,7 @@ func Fetch(limit int, progress Progress) (*Response, error) {
 }
 
 // list names every pull request to fetch, without paying for any timelines.
-func list(client *api.GraphQLClient, limit int) (login string, authored, requested []Ref, err error) {
+func list(client *api.GraphQLClient, opts Options) (login string, authored, requested []Ref, err error) {
 	var raw struct {
 		Viewer struct {
 			Login        string `json:"login"`
@@ -140,7 +163,7 @@ func list(client *api.GraphQLClient, limit int) (login string, authored, request
 		} `json:"requested"`
 	}
 
-	variables := map[string]any{"requested": requestedSearch, "limit": limit}
+	variables := map[string]any{"requested": requestedSearch, "limit": opts.Limit}
 	if err := client.Do(listQuery, variables, &raw); err != nil {
 		return "", nil, nil, fmt.Errorf("listing pull requests: %w", err)
 	}
@@ -149,13 +172,18 @@ func list(client *api.GraphQLClient, limit int) (login string, authored, request
 	// `archived:false` qualifier search offers, so archived pull requests are
 	// dropped here and still count towards --limit. Paginate if you ever hold
 	// more open pull requests than that, archived ones included.
-	var open []listNode
+	var mine, theirs []listNode
 	for _, n := range raw.Viewer.PullRequests.Nodes {
-		if !n.Repository.IsArchived {
-			open = append(open, n)
+		if !n.Repository.IsArchived && opts.wanted(n) {
+			mine = append(mine, n)
 		}
 	}
-	return raw.Viewer.Login, refs(open), refs(raw.Requested.Nodes), nil
+	for _, n := range raw.Requested.Nodes {
+		if opts.wanted(n) {
+			theirs = append(theirs, n)
+		}
+	}
+	return raw.Viewer.Login, refs(mine), refs(theirs), nil
 }
 
 // refs orders by repository then number so pull requests in the same
