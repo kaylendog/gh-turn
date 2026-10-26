@@ -15,7 +15,8 @@ jobs:
     name: zizmor
     runs-on: ubuntu-latest
     permissions:
-      security-events: write # upload SARIF to the security tab
+      contents: read # checkout
+      actions: read # zizmor online audits
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -23,3 +24,5 @@ jobs:
       - uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
           persona: pedantic
+          # annotations rather than SARIF, so no code scanning setup is needed
+          advanced-security: false
