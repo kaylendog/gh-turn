@@ -251,7 +251,7 @@ func (p *progress) draw() {
 		frame, p.done, p.total, len(p.inFlight))
 	p.lines = 1
 	for _, name := range p.inFlight {
-		fmt.Fprintf(os.Stderr, "\033[2m  ↻ %s\033[0m\n", name)
+		fmt.Fprintf(os.Stderr, "\033[2m    %s\033[0m\n", name)
 		p.lines++
 	}
 }
