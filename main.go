@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,8 +19,14 @@ import (
 	"github.com/kaylendog/gh-turn/internal/github"
 )
 
-// version is replaced at release time via -ldflags.
-var version = "dev"
+// version is the tag Go stamps into the binary when built from a tagged
+// checkout, as the release workflow does; local builds report a pseudo-version.
+func version() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "dev"
+}
 
 const titleWidth = 64
 
@@ -82,7 +89,7 @@ func main() {
 	ctx := kong.Parse(&cli,
 		kong.Name("gh turn"),
 		kong.Description("Sort your open pull requests by whose move it actually is."),
-		kong.Vars{"version": version},
+		kong.Vars{"version": version()},
 	)
 	ctx.FatalIfErrorf(run(cli))
 }
