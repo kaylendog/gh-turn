@@ -203,6 +203,15 @@ func printReport(rows []row, colour bool) {
 		return "\x1b[" + code + "m" + s + "\x1b[0m"
 	}
 
+	// Measure across every row rather than per section, so the columns hold
+	// their position all the way down the report instead of stepping in and
+	// out at each heading.
+	refWidth, whyWidth := 0, 0
+	for _, r := range rows {
+		refWidth = max(refWidth, len(r.ref))
+		whyWidth = max(whyWidth, len(r.verdict.Why))
+	}
+
 	printed := 0
 	for _, section := range sections {
 		var matching []row
@@ -216,18 +225,12 @@ func printReport(rows []row, colour bool) {
 		}
 		printed += len(matching)
 
-		// Pad before colouring, so escape codes never count towards width.
-		refWidth, whyWidth := 0, 0
-		for _, r := range matching {
-			refWidth = max(refWidth, len(r.ref))
-			whyWidth = max(whyWidth, len(r.verdict.Why))
-		}
-
 		fmt.Printf("\n%s %s\n",
 			paint("1;"+section.colour, section.heading),
 			paint("2", fmt.Sprintf("(%d)", len(matching))))
 
 		for _, r := range matching {
+			// Pad before colouring, so escape codes never count towards width.
 			fmt.Printf("  %s  %s  %s\n",
 				paint("36", pad(r.ref, refWidth)),
 				paint("2", pad(r.verdict.Why, whyWidth)),
