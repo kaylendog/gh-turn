@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/cli/go-gh/v2/pkg/term"
+	"github.com/muesli/termenv"
 
 	"github.com/kaylendog/gh-turn/internal/classify"
 	"github.com/kaylendog/gh-turn/internal/github"
@@ -115,7 +117,9 @@ func run(cli CLI) error {
 		printTSV(rows)
 		return nil
 	}
-	printReport(rows, colourEnabled(), cli.linked(isTerminal(os.Stdout)))
+	// FromEnv honours NO_COLOR, CLICOLOR and GH_FORCE_TTY the same way gh does.
+	terminal := term.FromEnv()
+	printReport(rows, terminal.IsColorEnabled(), cli.linked(terminal.IsTerminalOutput()))
 	return nil
 }
 
@@ -130,11 +134,6 @@ func (c CLI) linked(terminal bool) bool {
 	default:
 		return terminal
 	}
-}
-
-// hyperlink wraps text in OSC 8, making it clickable where that is understood.
-func hyperlink(url, text string) string {
-	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 
 // When is a moment given either as a date (2026-01-31) or as an age counted
@@ -253,7 +252,7 @@ func printReport(rows []row, colour, links bool) {
 			// counts towards the column width.
 			ref := r.ref
 			if links {
-				ref = hyperlink(r.url, ref)
+				ref = termenv.Hyperlink(r.url, ref)
 			}
 			ref = paint("36", ref) + strings.Repeat(" ", refWidth-len(r.ref))
 
@@ -318,7 +317,7 @@ var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 func newProgress() *progress {
 	p := &progress{
-		on:      isTerminal(os.Stderr),
+		on:      term.IsTerminal(os.Stderr),
 		stop:    make(chan struct{}),
 		stopped: make(chan struct{}),
 	}
@@ -399,22 +398,4 @@ func (p *progress) erase() {
 		fmt.Fprint(os.Stderr, "\033[1A\033[2K")
 	}
 	p.lines = 0
-}
-
-func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-// colourEnabled mirrors the usual terminal conventions: no colour when piped,
-// and NO_COLOR always wins.
-func colourEnabled() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	info, err := os.Stdout.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
 }
