@@ -230,11 +230,14 @@ func printReport(rows []row, colour bool) {
 			paint("2", fmt.Sprintf("(%d)", len(matching))))
 
 		for _, r := range matching {
+			// The reason is the point of the report, so it reads at full
+			// strength and the title recedes behind it.
+			//
 			// Pad before colouring, so escape codes never count towards width.
 			fmt.Printf("  %s  %s  %s\n",
 				paint("36", pad(r.ref, refWidth)),
-				paint("2", pad(r.verdict.Why, whyWidth)),
-				truncate(r.title, titleWidth))
+				pad(r.verdict.Why, whyWidth),
+				paint("2", truncate(r.title, titleWidth)))
 			fmt.Printf("  %s\n", paint("2", r.url))
 		}
 	}
