@@ -303,6 +303,44 @@ func TestPendingReviewIgnored(t *testing.T) {
 	}
 }
 
+func TestAgo(t *testing.T) {
+	now := ts(t, "2026-10-26T12:00:00Z")
+
+	cases := []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{"seconds", now.Add(-30 * time.Second), "30 seconds ago"},
+		{"a minute", now.Add(-time.Minute), "1 minute ago"},
+		{"minutes", now.Add(-20 * time.Minute), "20 minutes ago"},
+		{"an hour", now.Add(-time.Hour), "1 hour ago"},
+		{"hours", now.Add(-5 * time.Hour), "5 hours ago"},
+		{"a day", now.Add(-24 * time.Hour), "1 day ago"},
+		{"days", now.Add(-3 * 24 * time.Hour), "3 days ago"},
+		{"just inside a week", now.Add(-recent + time.Hour), "6 days ago"},
+
+		// Past a week a date places it faster than counting back.
+		{"a week falls back to a date", now.Add(-recent), "2026-10-19"},
+		{"well past", now.Add(-90 * 24 * time.Hour), "2026-07-28"},
+		{"years back", ts(t, "2021-06-19T00:00:00Z"), "2021-06-19"},
+
+		// Clock skew between you and GitHub should not produce "in 2 seconds".
+		{"clock skew reads as now", now.Add(10 * time.Second), "now"},
+		{"clearly future", now.Add(48 * time.Hour), "2026-10-28"},
+
+		{"zero time", time.Time{}, "never"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := agoAt(tc.at, now); got != tc.want {
+				t.Errorf("agoAt = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHumanise(t *testing.T) {
 	cases := map[string]string{
 		"REVIEW_REQUIRED":   "review required",

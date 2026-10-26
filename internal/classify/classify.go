@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 type Bucket string
@@ -49,7 +51,7 @@ func Authored(pr PullRequest, me string) Verdict {
 		return Verdict{Draft, "draft"}
 
 	case !theirs.IsZero() && theirs.After(mine):
-		return Verdict{Yours, "commented " + theirs.Format(time.DateOnly)}
+		return Verdict{Yours, "commented " + Ago(theirs)}
 
 	case ci == "FAILURE" || ci == "ERROR":
 		return Verdict{Yours, "checks failing"}
@@ -92,7 +94,34 @@ func Requested(pr PullRequest, me string) Verdict {
 	if last.IsZero() {
 		return Verdict{NeedsReview, "not yet reviewed"}
 	}
-	return Verdict{NeedsReReview, "you reviewed " + last.Format(time.DateOnly)}
+	return Verdict{NeedsReReview, "you reviewed " + Ago(last)}
+}
+
+// recent is how long something stays worth phrasing as an age. Past it, a
+// date is easier to place than "7 weeks ago".
+const recent = 7 * 24 * time.Hour
+
+// Ago renders when something happened, relative for the last week and as a
+// plain date before that.
+func Ago(t time.Time) string {
+	return agoAt(t, time.Now())
+}
+
+// skew is how far ahead of us GitHub's clock may be before a timestamp is
+// treated as genuinely in the future rather than as a difference in clocks.
+const skew = time.Minute
+
+func agoAt(t, now time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	if t.After(now) && t.Sub(now) < skew {
+		t = now
+	}
+	if now.Sub(t) < recent && !t.After(now) {
+		return humanize.RelTime(t, now, "ago", "from now")
+	}
+	return t.Format(time.DateOnly)
 }
 
 type event struct {

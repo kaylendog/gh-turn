@@ -127,10 +127,24 @@ var ages = []struct {
 	suffix string
 	back   func(time.Time, int) time.Time
 }{
-	{"mo", func(t time.Time, n int) time.Time { return t.AddDate(0, -n, 0) }},
-	{"y", func(t time.Time, n int) time.Time { return t.AddDate(-n, 0, 0) }},
+	{"mo", func(t time.Time, n int) time.Time { return monthsAgo(t, n) }},
+	{"y", func(t time.Time, n int) time.Time { return monthsAgo(t, 12*n) }},
 	{"w", func(t time.Time, n int) time.Time { return t.AddDate(0, 0, -7*n) }},
 	{"d", func(t time.Time, n int) time.Time { return t.AddDate(0, 0, -n) }},
+}
+
+// monthsAgo steps back whole months, clamping to the last day of the month it
+// lands in. time.AddDate alone normalises overflow forwards, so one month
+// before 31 October would come out as 1 October, and a year before 29 February
+// as 1 March.
+func monthsAgo(t time.Time, months int) time.Time {
+	year, month, day := t.Date()
+	first := time.Date(year, month-time.Month(months), 1,
+		t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+
+	// Day zero of the following month is the last day of this one.
+	last := time.Date(first.Year(), first.Month()+1, 0, 0, 0, 0, 0, t.Location()).Day()
+	return first.AddDate(0, 0, min(day, last)-1)
 }
 
 func (w *When) UnmarshalText(text []byte) error {

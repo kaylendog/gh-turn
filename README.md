@@ -49,10 +49,18 @@ gh extension install kaylendog/gh-turn
 ## Usage
 
 ```sh
-gh turn              # grouped report
-gh turn --tsv        # tab-separated rows: bucket, ref, reason, title, url
-gh turn --limit 100  # PRs to fetch per search (default 50)
+gh turn                      # grouped report
+gh turn --state yours        # only what needs you, comma separated
+gh turn --after 2026-01-01   # or an age: 6mo, 3w, 90d, 1y
+gh turn --before 1mo         # the stale end: untouched for a month or more
+gh turn --tsv                # tab separated: bucket, ref, reason, title, url
+gh turn --limit 100          # PRs to ask for per search (default 50)
 ```
+
+`--after` defaults to **6mo**, so long-abandoned pull requests stay out of the
+way. Pass `--after 2015-01-01` to see everything. Both date flags match on last
+activity and are applied before any timeline is fetched, so narrowing the range
+makes the command faster as well as shorter.
 
 Pipe `--tsv` into whatever you like:
 
