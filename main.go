@@ -115,20 +115,20 @@ func run(cli CLI) error {
 		printTSV(rows)
 		return nil
 	}
-	printReport(rows, colourEnabled(), cli.linked())
+	printReport(rows, colourEnabled(), cli.linked(isTerminal(os.Stdout)))
 	return nil
 }
 
 // linked decides whether references are rendered as OSC 8 hyperlinks. Auto
 // means any terminal, since support cannot be detected; see README.md.
-func (c CLI) linked() bool {
+func (c CLI) linked(terminal bool) bool {
 	switch c.Links {
 	case "always":
 		return true
 	case "never":
 		return false
 	default:
-		return isTerminal(os.Stdout)
+		return terminal
 	}
 }
 

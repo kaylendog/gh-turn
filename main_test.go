@@ -123,23 +123,22 @@ func TestHyperlink(t *testing.T) {
 
 func TestLinked(t *testing.T) {
 	cases := []struct {
-		links string
-		want  bool
+		name     string
+		links    string
+		terminal bool
+		want     bool
 	}{
-		{"always", true},
-		{"never", false},
+		{"always ignores the terminal", "always", false, true},
+		{"never ignores the terminal", "never", true, false},
+		{"auto follows a terminal", "auto", true, true},
+		{"auto follows a pipe", "auto", false, false},
 	}
 	for _, tc := range cases {
-		t.Run(tc.links, func(t *testing.T) {
-			if got := (CLI{Links: tc.links}).linked(); got != tc.want {
-				t.Errorf("linked() = %v, want %v", got, tc.want)
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (CLI{Links: tc.links}).linked(tc.terminal); got != tc.want {
+				t.Errorf("linked(%v) = %v, want %v", tc.terminal, got, tc.want)
 			}
 		})
-	}
-
-	// auto follows the terminal, and the test binary's stdout is not one.
-	if (CLI{Links: "auto"}).linked() {
-		t.Error("auto linked when stdout is not a terminal")
 	}
 }
 
