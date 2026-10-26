@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/kaylendog/gh-turn/internal/classify"
 	"github.com/kaylendog/gh-turn/internal/github"
@@ -61,17 +62,19 @@ func run(tsv bool, limit int) error {
 		return fmt.Errorf("--limit must be between 1 and 100, got %d", limit)
 	}
 
-	response, err := github.Fetch(limit)
+	progress := newProgress()
+	response, err := github.Fetch(limit, progress.update)
+	progress.clear()
 	if err != nil {
 		return err
 	}
-	me := response.Viewer.Login
+	me := response.Login
 
-	rows := make([]row, 0, len(response.Authored.Nodes)+len(response.Requested.Nodes))
-	for _, pr := range response.Authored.Nodes {
+	rows := make([]row, 0, len(response.Authored)+len(response.Requested))
+	for _, pr := range response.Authored {
 		rows = append(rows, newRow(pr, classify.Authored(pr, me)))
 	}
-	for _, pr := range response.Requested.Nodes {
+	for _, pr := range response.Requested {
 		rows = append(rows, newRow(pr, classify.Requested(pr, me)))
 	}
 
@@ -164,6 +167,69 @@ func truncate(s string, width int) string {
 		return s
 	}
 	return string(runes[:width-3]) + "..."
+}
+
+// progress names the pull requests being fetched. GitHub takes seconds to
+// resolve every timeline, which is long enough to look like a hang, and a
+// count alone does not say what is slow. It draws on stderr, so piping stdout
+// stays clean, and does nothing at all when stderr is not a terminal.
+//
+// Batches land out of order, so this shows the most recent arrivals rather
+// than a stable list.
+type progress struct {
+	mu    sync.Mutex
+	lines int // how many lines are on screen, to erase them later
+	on    bool
+}
+
+const progressRows = 4
+
+func newProgress() *progress {
+	return &progress{on: isTerminal(os.Stderr)}
+}
+
+func (p *progress) update(done, total int, names []string) {
+	if !p.on {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.erase()
+	fmt.Fprintf(os.Stderr, "\033[2mFetched %d/%d pull requests\033[0m\n", done, total)
+	p.lines = 1
+	for _, name := range names {
+		if p.lines > progressRows {
+			fmt.Fprintf(os.Stderr, "\033[2m  … and %d more\033[0m\n",
+				len(names)-progressRows)
+			p.lines++
+			break
+		}
+		fmt.Fprintf(os.Stderr, "\033[2m  ✓ %s\033[0m\n", name)
+		p.lines++
+	}
+}
+
+func (p *progress) clear() {
+	if !p.on {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.erase()
+}
+
+// erase walks back up over whatever was drawn last and wipes each line.
+func (p *progress) erase() {
+	for range p.lines {
+		fmt.Fprint(os.Stderr, "\033[1A\033[2K")
+	}
+	p.lines = 0
+}
+
+func isTerminal(f *os.File) bool {
+	info, err := f.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // colourEnabled mirrors the usual terminal conventions: no colour when piped,
