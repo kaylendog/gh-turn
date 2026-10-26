@@ -182,13 +182,11 @@ type progress struct {
 	on    bool
 }
 
-const progressRows = 4
-
 func newProgress() *progress {
 	return &progress{on: isTerminal(os.Stderr)}
 }
 
-func (p *progress) update(done, total int, names []string) {
+func (p *progress) update(done, total int, inFlight []string) {
 	if !p.on {
 		return
 	}
@@ -196,16 +194,11 @@ func (p *progress) update(done, total int, names []string) {
 	defer p.mu.Unlock()
 
 	p.erase()
-	fmt.Fprintf(os.Stderr, "\033[2mFetched %d/%d pull requests\033[0m\n", done, total)
+	fmt.Fprintf(os.Stderr, "\033[2m%d/%d fetched, %d in flight\033[0m\n",
+		done, total, len(inFlight))
 	p.lines = 1
-	for _, name := range names {
-		if p.lines > progressRows {
-			fmt.Fprintf(os.Stderr, "\033[2m  … and %d more\033[0m\n",
-				len(names)-progressRows)
-			p.lines++
-			break
-		}
-		fmt.Fprintf(os.Stderr, "\033[2m  ✓ %s\033[0m\n", name)
+	for _, name := range inFlight {
+		fmt.Fprintf(os.Stderr, "\033[2m  ↻ %s\033[0m\n", name)
 		p.lines++
 	}
 }

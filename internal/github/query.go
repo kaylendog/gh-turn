@@ -81,8 +81,10 @@ type listNode struct {
 	} `json:"repository"`
 }
 
-// Progress is called as each batch lands, naming the pull requests it covered.
-type Progress func(done, total int, names []string)
+// Progress is called whenever a batch starts or finishes, naming the pull
+// requests being fetched right now. Names stay in list order so the display
+// does not reshuffle between updates.
+type Progress func(done, total int, inFlight []string)
 
 // Response holds the pull requests to classify, archived repositories already
 // dropped.
@@ -164,22 +166,48 @@ func fetchTimelines(client *api.GraphQLClient, refs []Ref, progress Progress) (m
 		out     = make(map[string]classify.PullRequest, len(refs))
 		failure error
 		done    int
+		active  = make([]bool, len(refs)) // indexed by position in refs
 		wg      sync.WaitGroup
 		limiter = make(chan struct{}, workers)
 	)
 
-	for _, batch := range chunk(refs, chunkSize) {
+	// emit reports the current in-flight set. The caller must hold mu.
+	emit := func() {
+		if progress == nil {
+			return
+		}
+		names := make([]string, 0, len(refs))
+		for i, inFlight := range active {
+			if inFlight {
+				names = append(names, refs[i].Name)
+			}
+		}
+		progress(done, len(refs), names)
+	}
+
+	for start := 0; start < len(refs); start += chunkSize {
+		batch := refs[start:min(start+chunkSize, len(refs))]
+
 		wg.Add(1)
-		go func(batch []Ref) {
+		go func(start int, batch []Ref) {
 			defer wg.Done()
+
+			// Acquire first: a batch waiting for a worker is not yet in
+			// flight, and showing it as such would be a lie.
 			limiter <- struct{}{}
 			defer func() { <-limiter }()
 
 			ids := make([]string, len(batch))
-			names := make([]string, len(batch))
 			for i, r := range batch {
-				ids[i], names[i] = r.ID, r.Name
+				ids[i] = r.ID
 			}
+
+			mu.Lock()
+			for i := range batch {
+				active[start+i] = true
+			}
+			emit()
+			mu.Unlock()
 
 			var raw struct {
 				Nodes []classify.PullRequest `json:"nodes"`
@@ -188,6 +216,9 @@ func fetchTimelines(client *api.GraphQLClient, refs []Ref, progress Progress) (m
 
 			mu.Lock()
 			defer mu.Unlock()
+			for i := range batch {
+				active[start+i] = false
+			}
 			if err != nil {
 				if failure == nil {
 					failure = fmt.Errorf("fetching timelines: %w", err)
@@ -201,10 +232,8 @@ func fetchTimelines(client *api.GraphQLClient, refs []Ref, progress Progress) (m
 				}
 			}
 			done += len(batch)
-			if progress != nil {
-				progress(done, len(refs), names)
-			}
-		}(batch)
+			emit()
+		}(start, batch)
 	}
 
 	wg.Wait()
@@ -235,12 +264,4 @@ func dedupe(refs []Ref) []Ref {
 		}
 	}
 	return out
-}
-
-func chunk(refs []Ref, size int) [][]Ref {
-	var batches [][]Ref
-	for start := 0; start < len(refs); start += size {
-		batches = append(batches, refs[start:min(start+size, len(refs))])
-	}
-	return batches
 }
