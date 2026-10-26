@@ -49,8 +49,9 @@ type CLI struct {
 	After  When `help:"Only pull requests touched since this date or age." default:"6mo"`
 	Before When `help:"Only pull requests untouched since this date or age." optional:""`
 
-	Limit int  `help:"Most pull requests to ask for per search." default:"50"`
-	TSV   bool `name:"tsv" help:"Print tab separated rows instead of a report."`
+	Limit int    `help:"Most pull requests to ask for per search." default:"50"`
+	TSV   bool   `name:"tsv" help:"Print tab separated rows instead of a report."`
+	Links string `help:"Make references clickable: ${enum}. Auto means whenever the output is a terminal." enum:"auto,always,never" default:"auto"`
 
 	Version kong.VersionFlag `help:"Print the version and exit."`
 }
@@ -114,8 +115,26 @@ func run(cli CLI) error {
 		printTSV(rows)
 		return nil
 	}
-	printReport(rows, colourEnabled())
+	printReport(rows, colourEnabled(), cli.linked())
 	return nil
+}
+
+// linked decides whether references are rendered as OSC 8 hyperlinks. Auto
+// means any terminal, since support cannot be detected; see README.md.
+func (c CLI) linked() bool {
+	switch c.Links {
+	case "always":
+		return true
+	case "never":
+		return false
+	default:
+		return isTerminal(os.Stdout)
+	}
+}
+
+// hyperlink wraps text in OSC 8, making it clickable where that is understood.
+func hyperlink(url, text string) string {
+	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 
 // When is a moment given either as a date (2026-01-31) or as an age counted
@@ -195,7 +214,7 @@ func printTSV(rows []row) {
 	}
 }
 
-func printReport(rows []row, colour bool) {
+func printReport(rows []row, colour, links bool) {
 	paint := func(code, s string) string {
 		if !colour {
 			return s
@@ -230,15 +249,26 @@ func printReport(rows []row, colour bool) {
 			paint("2", fmt.Sprintf("(%d)", len(matching))))
 
 		for _, r := range matching {
+			// Pad outside the escapes, so neither colour nor the hyperlink
+			// counts towards the column width.
+			ref := r.ref
+			if links {
+				ref = hyperlink(r.url, ref)
+			}
+			ref = paint("36", ref) + strings.Repeat(" ", refWidth-len(r.ref))
+
 			// The reason is the point of the report, so it reads at full
 			// strength and the title recedes behind it.
-			//
-			// Pad before colouring, so escape codes never count towards width.
 			fmt.Printf("  %s  %s  %s\n",
-				paint("36", pad(r.ref, refWidth)),
+				ref,
 				pad(r.verdict.Why, whyWidth),
 				paint("2", truncate(r.title, titleWidth)))
-			fmt.Printf("  %s\n", paint("2", r.url))
+
+			// With a clickable reference the URL is noise; without one it is
+			// the only way to reach the pull request.
+			if !links {
+				fmt.Printf("  %s\n", paint("2", r.url))
+			}
 		}
 	}
 

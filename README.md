@@ -55,7 +55,18 @@ gh turn --after 2026-01-01   # or an age: 6mo, 3w, 90d, 1y
 gh turn --before 1mo         # the stale end: untouched for a month or more
 gh turn --tsv                # tab separated: bucket, ref, reason, title, url
 gh turn --limit 100          # PRs to ask for per search (default 50)
+gh turn --links never        # print URLs instead of clickable references
 ```
+
+References are rendered as [OSC 8][osc8] hyperlinks when the output is a
+terminal, which drops the URL line under each entry and roughly halves the
+report. There is no dependable way to ask a terminal whether it supports them,
+and the detection libraries work from an allowlist that misses several that
+do — so this is a choice rather than a guess. Terminals that don't understand
+the escape swallow it; if yours shows it instead, `--links never` restores the
+URL lines.
+
+[osc8]: https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda
 
 `--after` defaults to **6mo**, so long-abandoned pull requests stay out of the
 way. Pass `--after 2015-01-01` to see everything. Both date flags match on last

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -95,6 +96,50 @@ func TestWhenEmptyIsNoBound(t *testing.T) {
 	}
 	if !w.IsZero() {
 		t.Errorf("parse(\"\") = %s, want the zero time", w.Format(time.DateOnly))
+	}
+}
+
+// OSC 8 is zero width on screen, so anything measuring the reference for
+// alignment must do so before the escape is wrapped around it.
+func TestHyperlink(t *testing.T) {
+	const (
+		url  = "https://github.com/element-hq/element-web/pull/35404"
+		text = "element-hq/element-web#35404"
+	)
+	got := hyperlink(url, text)
+
+	want := "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
+	if got != want {
+		t.Errorf("hyperlink() = %q, want %q", got, want)
+	}
+	if !strings.Contains(got, text) {
+		t.Error("the link text is not present, so nothing would be shown")
+	}
+	// Two terminators, so the link is opened and then closed again.
+	if n := strings.Count(got, "\x1b]8;;"); n != 2 {
+		t.Errorf("found %d OSC 8 introducers, want 2", n)
+	}
+}
+
+func TestLinked(t *testing.T) {
+	cases := []struct {
+		links string
+		want  bool
+	}{
+		{"always", true},
+		{"never", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.links, func(t *testing.T) {
+			if got := (CLI{Links: tc.links}).linked(); got != tc.want {
+				t.Errorf("linked() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	// auto follows the terminal, and the test binary's stdout is not one.
+	if (CLI{Links: "auto"}).linked() {
+		t.Error("auto linked when stdout is not a terminal")
 	}
 }
 
