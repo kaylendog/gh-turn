@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/kaylendog/gh-turn/internal/classify"
 	"github.com/kaylendog/gh-turn/internal/github"
@@ -174,16 +175,54 @@ func truncate(s string, width int) string {
 // count alone does not say what is slow. It draws on stderr, so piping stdout
 // stays clean, and does nothing at all when stderr is not a terminal.
 //
-// Batches land out of order, so this shows the most recent arrivals rather
-// than a stable list.
+// Names arrive in list order, so entries hold their position as the set
+// shrinks rather than jumping about between redraws.
 type progress struct {
-	mu    sync.Mutex
-	lines int // how many lines are on screen, to erase them later
-	on    bool
+	mu       sync.Mutex
+	lines    int // how many lines are on screen, to erase them later
+	frame    int
+	done     int
+	total    int
+	inFlight []string
+	on       bool
+	stop     chan struct{}
+	stopped  chan struct{}
 }
 
+var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+
 func newProgress() *progress {
-	return &progress{on: isTerminal(os.Stderr)}
+	p := &progress{
+		on:      isTerminal(os.Stderr),
+		stop:    make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
+	if !p.on {
+		close(p.stopped)
+		return p
+	}
+	// Batches can take a second or more, so the display has to animate on its
+	// own rather than only when one lands.
+	go p.animate()
+	return p
+}
+
+func (p *progress) animate() {
+	defer close(p.stopped)
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+
+	for {
+		select {
+		case <-p.stop:
+			return
+		case <-tick.C:
+			p.mu.Lock()
+			p.frame++
+			p.draw()
+			p.mu.Unlock()
+		}
+	}
 }
 
 func (p *progress) update(done, total int, inFlight []string) {
@@ -192,12 +231,26 @@ func (p *progress) update(done, total int, inFlight []string) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.done, p.total, p.inFlight = done, total, inFlight
+	p.draw()
+}
 
+// draw repaints the whole block. The caller must hold mu.
+func (p *progress) draw() {
 	p.erase()
-	fmt.Fprintf(os.Stderr, "\033[2m%d/%d fetched, %d in flight\033[0m\n",
-		done, total, len(inFlight))
+	frame := spinner[p.frame%len(spinner)]
+
+	// Before the first batch reports in, the listing pass is still running.
+	if p.total == 0 {
+		fmt.Fprintf(os.Stderr, "\033[2m%c Listing pull requests\033[0m\n", frame)
+		p.lines = 1
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "\033[2m%c %d/%d fetched, %d in flight\033[0m\n",
+		frame, p.done, p.total, len(p.inFlight))
 	p.lines = 1
-	for _, name := range inFlight {
+	for _, name := range p.inFlight {
 		fmt.Fprintf(os.Stderr, "\033[2m  ↻ %s\033[0m\n", name)
 		p.lines++
 	}
@@ -207,6 +260,9 @@ func (p *progress) clear() {
 	if !p.on {
 		return
 	}
+	close(p.stop)
+	<-p.stopped
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.erase()

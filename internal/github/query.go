@@ -7,7 +7,10 @@
 package github
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -25,12 +28,14 @@ import (
 // out anything routed via a team review queue.
 const requestedSearch = "is:open is:pr user-review-requested:@me archived:false sort:updated-desc"
 
-// Measured against ~32 open pull requests: 8 per request across 4 concurrent
-// requests took ~2.3s, against ~4.5s for one large request and ~4.0s for one
-// request per pull request, which pays the per-request overhead every time.
+// Batching matters more than it looks. Measured against ~32 open pull
+// requests, parallel batches took ~2.3s against ~4.5s for one large request;
+// one request per pull request was worse again at ~4.0s, paying the
+// per-request overhead every time. Smaller batches also update the progress
+// display more often, which is why these are not larger.
 const (
-	chunkSize = 8
-	workers   = 4
+	chunkSize = 4
+	workers   = 6
 )
 
 const listQuery = `
@@ -144,19 +149,41 @@ func list(client *api.GraphQLClient, limit int) (login string, authored, request
 	// `archived:false` qualifier search offers, so archived pull requests are
 	// dropped here and still count towards --limit. Paginate if you ever hold
 	// more open pull requests than that, archived ones included.
+	var open []listNode
 	for _, n := range raw.Viewer.PullRequests.Nodes {
 		if !n.Repository.IsArchived {
-			authored = append(authored, ref(n))
+			open = append(open, n)
 		}
 	}
-	for _, n := range raw.Requested.Nodes {
-		requested = append(requested, ref(n))
-	}
-	return raw.Viewer.Login, authored, requested, nil
+	return raw.Viewer.Login, refs(open), refs(raw.Requested.Nodes), nil
 }
 
-func ref(n listNode) Ref {
-	return Ref{ID: n.ID, Name: fmt.Sprintf("%s#%d", n.Repository.NameWithOwner, n.Number)}
+// refs orders by repository then number so pull requests in the same
+// organisation sit together everywhere they are shown.
+//
+// Two details matter for reading it: the number is compared numerically,
+// since sorting the rendered name would put #101 before #96; and the
+// repository is folded to lower case, since ASCII order would otherwise file
+// every capitalised organisation ahead of the rest.
+func refs(nodes []listNode) []Ref {
+	slices.SortFunc(nodes, func(a, b listNode) int {
+		return cmp.Or(
+			cmp.Compare(
+				strings.ToLower(a.Repository.NameWithOwner),
+				strings.ToLower(b.Repository.NameWithOwner),
+			),
+			cmp.Compare(a.Number, b.Number),
+		)
+	})
+
+	out := make([]Ref, 0, len(nodes))
+	for _, n := range nodes {
+		out = append(out, Ref{
+			ID:   n.ID,
+			Name: fmt.Sprintf("%s#%d", n.Repository.NameWithOwner, n.Number),
+		})
+	}
+	return out
 }
 
 // fetchTimelines runs the batches concurrently and returns them keyed by id.
