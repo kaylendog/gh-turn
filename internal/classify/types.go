@@ -51,12 +51,27 @@ type CommitNode struct {
 	Commit Commit `json:"commit"`
 }
 
+// QueueEvent is a merge queue addition or removal; Reason is only set on a
+// removal, e.g. "failed_checks".
+type QueueEvent struct {
+	TypeName  string    `json:"__typename"`
+	CreatedAt time.Time `json:"createdAt"`
+	Reason    string    `json:"reason"`
+}
+
 type PullRequest struct {
 	Number         int    `json:"number"`
 	Title          string `json:"title"`
 	URL            string `json:"url"`
 	IsDraft        bool   `json:"isDraft"`
 	ReviewDecision string `json:"reviewDecision"`
+	IsInMergeQueue bool   `json:"isInMergeQueue"`
+
+	// Only the most recent merge queue event is fetched, so a removal here
+	// is one nobody has re-queued after.
+	TimelineItems struct {
+		Nodes []QueueEvent `json:"nodes"`
+	} `json:"timelineItems"`
 
 	Repository struct {
 		NameWithOwner string `json:"nameWithOwner"`
@@ -101,6 +116,19 @@ func (pr PullRequest) lastPush() time.Time {
 		return time.Time{}
 	}
 	return pr.Commits.Nodes[0].Commit.CommittedDate
+}
+
+// dequeued returns the merge queue removal still waiting on you, if any: the
+// latest queue event is a removal and nothing has been pushed since.
+func (pr PullRequest) dequeued() (reason string, ok bool) {
+	if len(pr.TimelineItems.Nodes) == 0 {
+		return "", false
+	}
+	last := pr.TimelineItems.Nodes[0]
+	if last.TypeName != "RemovedFromMergeQueueEvent" || !last.CreatedAt.After(pr.lastPush()) {
+		return "", false
+	}
+	return last.Reason, true
 }
 
 // checks is the aggregate CI state, or "NONE" when the PR has no checks.

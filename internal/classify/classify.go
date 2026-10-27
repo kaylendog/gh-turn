@@ -46,13 +46,22 @@ func Authored(pr PullRequest, me string, everyone bool) Verdict {
 	}
 	pending := pr.ReviewRequests.TotalCount
 	ci := pr.checks()
+	reason, dropped := pr.dequeued()
 
 	switch {
 	case pr.IsDraft:
 		return Verdict{Draft, "draft"}
 
+	case pr.IsInMergeQueue:
+		return Verdict{Theirs, "in merge queue"}
+
 	case !theirs.IsZero() && theirs.After(mine):
 		return Verdict{Ours, "commented " + Ago(theirs)}
+
+	// Kicked out of the queue and not re-queued: a flake or a conflict that
+	// GitHub otherwise still reports as approved and green.
+	case dropped:
+		return Verdict{Ours, "dropped from merge queue: " + humanise(reason)}
 
 	case ci == "FAILURE" || ci == "ERROR":
 		return Verdict{Ours, "checks failing"}

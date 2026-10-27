@@ -61,8 +61,11 @@ const timelineQuery = `
 query($ids: [ID!]!) {
   nodes(ids: $ids) {
     ... on PullRequest {
-      number title url isDraft reviewDecision
+      number title url isDraft reviewDecision isInMergeQueue
       repository { nameWithOwner }
+      timelineItems(last: 1, itemTypes: [ADDED_TO_MERGE_QUEUE_EVENT, REMOVED_FROM_MERGE_QUEUE_EVENT]) {
+        nodes { __typename ... on RemovedFromMergeQueueEvent { createdAt reason } }
+      }
       reviewRequests(first: 20) { totalCount }
       commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
       comments(last: 20) { nodes { author { login __typename } createdAt } }
