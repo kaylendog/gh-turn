@@ -34,14 +34,17 @@ func (r remark) actor() *Actor {
 }
 
 type fixture struct {
-	draft    bool
-	decision string
-	pending  int
-	pushed   string
-	ci       string // "" means no checks at all
-	comments []remark
-	reviews  []remark
-	threads  []remark
+	draft     bool
+	decision  string
+	pending   int
+	pushed    string
+	ci        string // "" means no checks at all
+	queued    bool
+	dropped   string // merge queue removal reason, "" means not removed
+	droppedAt string
+	comments  []remark
+	reviews   []remark
+	threads   []remark
 }
 
 func (f fixture) build(t *testing.T) PullRequest {
@@ -53,6 +56,12 @@ func (f fixture) build(t *testing.T) PullRequest {
 	pr.IsDraft = f.draft
 	pr.ReviewDecision = f.decision
 	pr.ReviewRequests.TotalCount = f.pending
+	pr.IsInMergeQueue = f.queued
+	if f.dropped != "" {
+		pr.TimelineItems.Nodes = []QueueEvent{{
+			TypeName: "RemovedFromMergeQueueEvent", CreatedAt: ts(t, f.droppedAt), Reason: f.dropped,
+		}}
+	}
 
 	if f.pushed != "" {
 		node := CommitNode{Commit: Commit{CommittedDate: ts(t, f.pushed)}}
@@ -180,6 +189,29 @@ func TestAuthored(t *testing.T) {
 		pr: fixture{
 			decision: "APPROVED", pending: 0,
 			pushed: "2026-10-25T00:00:00Z",
+		},
+		want: Merge,
+	}, {
+		name: "in the merge queue is waiting on the robots",
+		pr: fixture{
+			decision: "APPROVED", pending: 0, queued: true,
+			pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
+		},
+		want: Theirs,
+	}, {
+		name: "dropped from the merge queue is my move",
+		pr: fixture{
+			decision: "APPROVED", pending: 0,
+			pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
+			dropped: "failed_checks", droppedAt: "2026-10-26T00:00:00Z",
+		},
+		want: Ours,
+	}, {
+		name: "pushing after a merge queue drop clears it",
+		pr: fixture{
+			decision: "APPROVED", pending: 0,
+			pushed: "2026-10-27T00:00:00Z", ci: "SUCCESS",
+			dropped: "failed_checks", droppedAt: "2026-10-26T00:00:00Z",
 		},
 		want: Merge,
 	}, {
