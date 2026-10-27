@@ -24,7 +24,7 @@ type Bucket string
 const (
 	NeedsReview   Bucket = "review"   // your review was requested, you haven't looked
 	NeedsReReview Bucket = "rereview" // you reviewed already, it moved on
-	Yours         Bucket = "yours"    // your move
+	Ours          Bucket = "ours"     // our move
 	Merge         Bucket = "merge"    // approved and green
 	Theirs        Bucket = "theirs"   // waiting on someone else
 	Draft         Bucket = "draft"
@@ -52,16 +52,16 @@ func Authored(pr PullRequest, me string, everyone bool) Verdict {
 		return Verdict{Draft, "draft"}
 
 	case !theirs.IsZero() && theirs.After(mine):
-		return Verdict{Yours, "commented " + Ago(theirs)}
+		return Verdict{Ours, "commented " + Ago(theirs)}
 
 	case ci == "FAILURE" || ci == "ERROR":
-		return Verdict{Yours, "checks failing"}
+		return Verdict{Ours, "checks failing"}
 
 	// Only your move while no re-request is outstanding: asking for another
 	// look hands the PR back to the reviewer even though GitHub keeps
 	// reporting CHANGES_REQUESTED.
 	case pr.ReviewDecision == "CHANGES_REQUESTED" && pending == 0:
-		return Verdict{Yours, "changes requested"}
+		return Verdict{Ours, "changes requested"}
 
 	// Outstanding requests don't block merging once GitHub says APPROVED;
 	// team fan-out leaves one dangling on most PRs.

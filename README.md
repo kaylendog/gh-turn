@@ -50,7 +50,7 @@ gh extension install kaylendog/gh-turn
 
 ```sh
 gh turn                      # grouped report
-gh turn --state yours        # only what needs you, comma separated
+gh turn --state ours         # only what needs you, comma separated
 gh turn --after 2026-01-01   # or an age: 6mo, 3w, 90d, 1y
 gh turn --before 1mo         # the stale end: untouched for a month or more
 gh turn --everyone           # approved only counts once every requested reviewer has looked
@@ -77,7 +77,7 @@ makes the command faster as well as shorter.
 Pipe `--tsv` into whatever you like:
 
 ```sh
-gh turn --tsv | grep ^yours | fzf | cut -f5 | xargs -r gh pr view --web
+gh turn --tsv | grep ^ours | fzf | cut -f5 | xargs -r gh pr view --web
 ```
 
 ## Buckets
@@ -86,7 +86,7 @@ gh turn --tsv | grep ^yours | fzf | cut -f5 | xargs -r gh pr view --web
 |---|---|
 | `review` | Your review was requested directly and you haven't looked yet |
 | `rereview` | You reviewed already; check whether it moved on |
-| `yours` | Your move — a human commented after your last push, checks are red, or changes were requested with no re-request outstanding |
+| `ours` | Your move — a human commented after your last push, checks are red, or changes were requested with no re-request outstanding |
 | `merge` | Approved, no reviewers outstanding, checks green |
 | `theirs` | Waiting on someone else |
 | `draft` | Your drafts |

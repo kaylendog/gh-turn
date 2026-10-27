@@ -45,7 +45,7 @@ var sections = []struct {
 }{
 	{classify.NeedsReview, "Review requested of you", "33"},
 	{classify.NeedsReReview, "You reviewed, check again", "33"},
-	{classify.Yours, "Your move", "31"},
+	{classify.Ours, "Your move", "31"},
 	{classify.Merge, "Ready to merge", "32"},
 	{classify.Theirs, "Waiting on them", "34"},
 	{classify.Draft, "Your drafts", "90"},
@@ -53,7 +53,7 @@ var sections = []struct {
 
 // CLI is the command line, as kong reads it.
 type CLI struct {
-	State []classify.Bucket `help:"Only show these buckets, comma separated: ${enum}." sep:"," enum:"review,rereview,yours,merge,theirs,draft" optional:""`
+	State []classify.Bucket `help:"Only show these buckets, comma separated: ${enum}." sep:"," enum:"review,rereview,ours,merge,theirs,draft" optional:""`
 
 	After  When `help:"Only pull requests touched since this date or age." default:"6mo"`
 	Before When `help:"Only pull requests untouched since this date or age." optional:""`

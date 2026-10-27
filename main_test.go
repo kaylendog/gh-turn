@@ -127,9 +127,9 @@ func TestWants(t *testing.T) {
 		want   bool
 	}{
 		{"no filter admits everything", nil, classify.Draft, true},
-		{"listed bucket passes", []classify.Bucket{classify.Yours}, classify.Yours, true},
-		{"unlisted bucket is dropped", []classify.Bucket{classify.Yours}, classify.Theirs, false},
-		{"one of several", []classify.Bucket{classify.Yours, classify.Merge}, classify.Merge, true},
+		{"listed bucket passes", []classify.Bucket{classify.Ours}, classify.Ours, true},
+		{"unlisted bucket is dropped", []classify.Bucket{classify.Ours}, classify.Theirs, false},
+		{"one of several", []classify.Bucket{classify.Ours, classify.Merge}, classify.Merge, true},
 	}
 
 	for _, tc := range cases {
@@ -208,10 +208,10 @@ func TestCLIParses(t *testing.T) {
 
 	t.Run("state list", func(t *testing.T) {
 		cli, k := parser(t)
-		if _, err := k.Parse([]string{"--state", "yours,merge"}); err != nil {
+		if _, err := k.Parse([]string{"--state", "ours,merge"}); err != nil {
 			t.Fatalf("parsing --state: %v", err)
 		}
-		want := []classify.Bucket{classify.Yours, classify.Merge}
+		want := []classify.Bucket{classify.Ours, classify.Merge}
 		if len(cli.State) != len(want) {
 			t.Fatalf("State = %v, want %v", cli.State, want)
 		}

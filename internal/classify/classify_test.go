@@ -111,7 +111,7 @@ func TestAuthored(t *testing.T) {
 			pushed: "2026-10-20T00:00:00Z", ci: "SUCCESS",
 			comments: []remark{{who: "jmartinesp", at: "2026-10-25T00:00:00Z"}},
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "inline thread reply after my push is my move",
 		pr: fixture{
@@ -119,7 +119,7 @@ func TestAuthored(t *testing.T) {
 			pushed: "2026-10-20T00:00:00Z", ci: "SUCCESS",
 			threads: []remark{{who: "uhoreg", at: "2026-10-25T00:00:00Z"}},
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "my own comment does not summon me",
 		pr: fixture{
@@ -153,7 +153,7 @@ func TestAuthored(t *testing.T) {
 			decision: "CHANGES_REQUESTED", pending: 0,
 			pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "changes requested but review re-requested waits on them",
 		pr: fixture{
@@ -167,7 +167,7 @@ func TestAuthored(t *testing.T) {
 			decision: "REVIEW_REQUIRED", pending: 1,
 			pushed: "2026-10-25T00:00:00Z", ci: "FAILURE",
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "approved and green is ready to merge",
 		pr: fixture{
@@ -206,7 +206,7 @@ func TestAuthored(t *testing.T) {
 			pushed: "2026-10-20T00:00:00Z", ci: "SUCCESS",
 			reviews: []remark{{who: "uhoreg", at: "2026-10-25T00:00:00Z", state: "COMMENTED"}},
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "a changes-requested review after my push is my move",
 		pr: fixture{
@@ -214,7 +214,7 @@ func TestAuthored(t *testing.T) {
 			pushed: "2026-10-20T00:00:00Z", ci: "SUCCESS",
 			reviews: []remark{{who: "uhoreg", at: "2026-10-25T00:00:00Z", state: "CHANGES_REQUESTED"}},
 		},
-		want: Yours,
+		want: Ours,
 	}, {
 		name: "a dismissed review is not a remark",
 		pr: fixture{
