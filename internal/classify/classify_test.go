@@ -183,12 +183,12 @@ func TestAuthored(t *testing.T) {
 		},
 		want: Merge,
 	}, {
-		name: "approved but still awaiting another reviewer",
+		name: "approved with a stale request still open is ready to merge",
 		pr: fixture{
 			decision: "APPROVED", pending: 1,
 			pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
 		},
-		want: Theirs,
+		want: Merge,
 	}, {
 		// An approval arriving after your last push is the usual way a PR
 		// becomes mergeable; counting it as a remark hid the merge bucket.
@@ -239,7 +239,7 @@ func TestAuthored(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Authored(tc.pr.build(t), me)
+			got := Authored(tc.pr.build(t), me, false)
 			if got.Bucket != tc.want {
 				t.Errorf("bucket = %q (%s), want %q", got.Bucket, got.Why, tc.want)
 			}
@@ -258,9 +258,23 @@ func TestChecksRunningIsExplained(t *testing.T) {
 		pushed: "2026-10-25T00:00:00Z", ci: "PENDING",
 	}.build(t)
 
-	got := Authored(pr, me)
+	got := Authored(pr, me, false)
 	if got.Bucket != Theirs || got.Why != "checks running" {
 		t.Errorf("verdict = %+v, want {theirs checks running}", got)
+	}
+}
+
+// --everyone restores the stricter reading: a dangling request keeps an
+// approved PR out of the merge bucket.
+func TestEveryoneWaitsOnStaleRequests(t *testing.T) {
+	pr := fixture{
+		decision: "APPROVED", pending: 1,
+		pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
+	}.build(t)
+
+	got := Authored(pr, me, true)
+	if got.Bucket != Theirs || got.Why != "1 awaiting review" {
+		t.Errorf("verdict = %+v, want {theirs 1 awaiting review}", got)
 	}
 }
 

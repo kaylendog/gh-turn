@@ -37,8 +37,9 @@ type Verdict struct {
 	Why    string
 }
 
-// Authored reports whose move it is on a PR you opened.
-func Authored(pr PullRequest, me string) Verdict {
+// Authored reports whose move it is on a PR you opened. With everyone set, an
+// approved PR only reads as mergeable once every requested reviewer has looked.
+func Authored(pr PullRequest, me string, everyone bool) Verdict {
 	mine, theirs := activity(pr, me)
 	if push := pr.lastPush(); push.After(mine) {
 		mine = push
@@ -62,7 +63,9 @@ func Authored(pr PullRequest, me string) Verdict {
 	case pr.ReviewDecision == "CHANGES_REQUESTED" && pending == 0:
 		return Verdict{Yours, "changes requested"}
 
-	case pr.ReviewDecision == "APPROVED" && pending == 0 && (ci == "SUCCESS" || ci == "NONE"):
+	// Outstanding requests don't block merging once GitHub says APPROVED;
+	// team fan-out leaves one dangling on most PRs.
+	case pr.ReviewDecision == "APPROVED" && (pending == 0 || !everyone) && (ci == "SUCCESS" || ci == "NONE"):
 		return Verdict{Merge, "approved, checks green"}
 
 	case pending > 0:

@@ -58,6 +58,8 @@ type CLI struct {
 	After  When `help:"Only pull requests touched since this date or age." default:"6mo"`
 	Before When `help:"Only pull requests untouched since this date or age." optional:""`
 
+	Everyone bool `help:"Only call a pull request ready to merge once every requested reviewer has looked, not just once GitHub says approved."`
+
 	Limit int    `help:"Most pull requests to ask for per search." default:"50"`
 	TSV   bool   `name:"tsv" help:"Print tab separated rows instead of a report."`
 	Links string `help:"Make references clickable: ${enum}. Auto means whenever the output is a terminal." enum:"auto,always,never" default:"auto"`
@@ -114,7 +116,7 @@ func run(cli CLI) error {
 		}
 	}
 	for _, pr := range response.Authored {
-		add(pr, classify.Authored(pr, me))
+		add(pr, classify.Authored(pr, me, cli.Everyone))
 	}
 	for _, pr := range response.Requested {
 		add(pr, classify.Requested(pr, me))

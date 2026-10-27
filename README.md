@@ -53,6 +53,7 @@ gh turn                      # grouped report
 gh turn --state yours        # only what needs you, comma separated
 gh turn --after 2026-01-01   # or an age: 6mo, 3w, 90d, 1y
 gh turn --before 1mo         # the stale end: untouched for a month or more
+gh turn --everyone           # approved only counts once every requested reviewer has looked
 gh turn --tsv                # tab separated: bucket, ref, reason, title, url
 gh turn --limit 100          # PRs to ask for per search (default 50)
 gh turn --links never        # print URLs instead of clickable references
