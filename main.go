@@ -47,13 +47,14 @@ var sections = []struct {
 	{classify.NeedsReReview, "You reviewed, check again", "33"},
 	{classify.Ours, "Your move", "31"},
 	{classify.Merge, "Ready to merge", "32"},
+	{classify.Queued, "Merging", "36"},
 	{classify.Theirs, "Waiting on them", "34"},
 	{classify.Draft, "Your drafts", "90"},
 }
 
 // CLI is the command line, as kong reads it.
 type CLI struct {
-	State []classify.Bucket `help:"Only show these buckets, comma separated: ${enum}." sep:"," enum:"review,rereview,ours,merge,theirs,draft" optional:""`
+	State []classify.Bucket `help:"Only show these buckets, comma separated: ${enum}." sep:"," enum:"review,rereview,ours,merge,queued,theirs,draft" optional:""`
 
 	After  When `help:"Only pull requests touched since this date or age." default:"6mo"`
 	Before When `help:"Only pull requests untouched since this date or age." optional:""`
@@ -375,16 +376,16 @@ func (p *progress) draw() {
 
 	// Before the first batch reports in, the listing pass is still running.
 	if p.total == 0 {
-		fmt.Fprintf(os.Stderr, "\033[2m%c Listing pull requests\033[0m\n", frame)
+		fmt.Fprintf(os.Stderr, "%c Listing pull requests\n", frame)
 		p.lines = 1
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "\033[2m%c %d/%d fetched, %d in flight\033[0m\n",
+	fmt.Fprintf(os.Stderr, "%c %d/%d fetched, %d in flight\n",
 		frame, p.done, p.total, len(p.inFlight))
 	p.lines = 1
 	for _, name := range p.inFlight {
-		fmt.Fprintf(os.Stderr, "\033[2m    %s\033[0m\n", name)
+		fmt.Fprintf(os.Stderr, "    %s\n", name)
 		p.lines++
 	}
 }

@@ -192,12 +192,12 @@ func TestAuthored(t *testing.T) {
 		},
 		want: Merge,
 	}, {
-		name: "in the merge queue is waiting on the robots",
+		name: "in the merge queue is being merged",
 		pr: fixture{
 			decision: "APPROVED", pending: 0, queued: true,
 			pushed: "2026-10-25T00:00:00Z", ci: "SUCCESS",
 		},
-		want: Theirs,
+		want: Queued,
 	}, {
 		name: "dropped from the merge queue is my move",
 		pr: fixture{

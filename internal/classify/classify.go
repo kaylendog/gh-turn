@@ -26,6 +26,7 @@ const (
 	NeedsReReview Bucket = "rereview" // you reviewed already, it moved on
 	Ours          Bucket = "ours"     // our move
 	Merge         Bucket = "merge"    // approved and green
+	Queued        Bucket = "queued"   // in the merge queue
 	Theirs        Bucket = "theirs"   // waiting on someone else
 	Draft         Bucket = "draft"
 )
@@ -53,7 +54,7 @@ func Authored(pr PullRequest, me string, everyone bool) Verdict {
 		return Verdict{Draft, "draft"}
 
 	case pr.IsInMergeQueue:
-		return Verdict{Theirs, "in merge queue"}
+		return Verdict{Queued, "in merge queue"}
 
 	case !theirs.IsZero() && theirs.After(mine):
 		return Verdict{Ours, "commented " + Ago(theirs)}

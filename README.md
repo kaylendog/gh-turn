@@ -88,6 +88,7 @@ gh turn --tsv | grep ^ours | fzf | cut -f5 | xargs -r gh pr view --web
 | `rereview` | You reviewed already; check whether it moved on |
 | `ours` | Your move — a human commented after your last push, checks are red, the merge queue dropped it, or changes were requested with no re-request outstanding |
 | `merge` | Approved, no reviewers outstanding, checks green |
+| `queued` | In the merge queue, being merged |
 | `theirs` | Waiting on someone else |
 | `draft` | Your drafts |
 
