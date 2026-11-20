@@ -40,6 +40,9 @@ A third problem is just a wrong qualifier: `review-requested:@me` includes
 requests routed to you via a team review queue. `gh turn` uses
 `user-review-requested:@me`, which matches only requests aimed at you.
 
+Pull requests assigned to you count as yours to drive, so they are sorted the
+same way as the ones you opened.
+
 ## Install
 
 ```sh

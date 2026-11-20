@@ -29,6 +29,11 @@ import (
 // out anything routed via a team review queue.
 const requestedSearch = "is:open is:pr user-review-requested:@me archived:false sort:updated-desc"
 
+// Pull requests assigned to you count as yours to drive, so they join the
+// authored half. -author:@me keeps your own pull requests out, which
+// viewer.pullRequests already covers.
+const assignedSearch = "is:open is:pr assignee:@me -author:@me archived:false sort:updated-desc"
+
 // Batching matters more than it looks. Measured against ~32 open pull
 // requests, parallel batches took ~2.3s against ~4.5s for one large request;
 // one request per pull request was worse again at ~4.0s, paying the
@@ -40,7 +45,7 @@ const (
 )
 
 const listQuery = `
-query($requested: String!, $limit: Int!) {
+query($requested: String!, $assigned: String!, $limit: Int!) {
   viewer {
     login
     pullRequests(states: OPEN, first: $limit,
@@ -49,6 +54,11 @@ query($requested: String!, $limit: Int!) {
     }
   }
   requested: search(query: $requested, type: ISSUE, first: $limit) {
+    nodes { ... on PullRequest {
+      id number updatedAt repository { nameWithOwner }
+    }}
+  }
+  assigned: search(query: $assigned, type: ISSUE, first: $limit) {
     nodes { ... on PullRequest {
       id number updatedAt repository { nameWithOwner }
     }}
@@ -118,14 +128,16 @@ func (o Options) wanted(n listNode) bool {
 type Progress func(done, total int, inFlight []string)
 
 // Response holds the pull requests to classify, archived repositories already
-// dropped.
+// dropped. Authored also carries pull requests assigned to you, since both are
+// yours to drive.
 type Response struct {
 	Login     string
 	Authored  []classify.PullRequest
 	Requested []classify.PullRequest
 }
 
-// Fetch returns your open pull requests alongside those awaiting your review.
+// Fetch returns the open pull requests you authored or are assigned to,
+// alongside those awaiting your review.
 func Fetch(opts Options, progress Progress) (*Response, error) {
 	client, err := api.DefaultGraphQLClient()
 	if err != nil {
@@ -164,9 +176,16 @@ func list(client *api.GraphQLClient, opts Options) (login string, authored, requ
 		Requested struct {
 			Nodes []listNode `json:"nodes"`
 		} `json:"requested"`
+		Assigned struct {
+			Nodes []listNode `json:"nodes"`
+		} `json:"assigned"`
 	}
 
-	variables := map[string]any{"requested": requestedSearch, "limit": opts.Limit}
+	variables := map[string]any{
+		"requested": requestedSearch,
+		"assigned":  assignedSearch,
+		"limit":     opts.Limit,
+	}
 	if err := client.Do(listQuery, variables, &raw); err != nil {
 		return "", nil, nil, fmt.Errorf("listing pull requests: %w", err)
 	}
@@ -184,6 +203,17 @@ func list(client *api.GraphQLClient, opts Options) (login string, authored, requ
 	for _, n := range raw.Requested.Nodes {
 		if opts.wanted(n) {
 			theirs = append(theirs, n)
+		}
+	}
+	// A pull request can be both assigned to you and awaiting your review. The
+	// review request is the clearer prompt, so that half keeps it.
+	awaited := make(map[string]bool, len(theirs))
+	for _, n := range theirs {
+		awaited[n.ID] = true
+	}
+	for _, n := range raw.Assigned.Nodes {
+		if !awaited[n.ID] && opts.wanted(n) {
+			mine = append(mine, n)
 		}
 	}
 	return raw.Viewer.Login, refs(mine), refs(theirs), nil

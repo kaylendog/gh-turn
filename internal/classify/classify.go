@@ -38,8 +38,9 @@ type Verdict struct {
 	Why    string
 }
 
-// Authored reports whose move it is on a PR you opened. With everyone set, an
-// approved PR only reads as mergeable once every requested reviewer has looked.
+// Authored reports whose move it is on a PR you own: one you opened, or one
+// assigned to you to drive. With everyone set, an approved PR only reads as
+// mergeable once every requested reviewer has looked.
 func Authored(pr PullRequest, me string, everyone bool) Verdict {
 	mine, theirs := activity(pr, me)
 	if push := pr.lastPush(); push.After(mine) {
