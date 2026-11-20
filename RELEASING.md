@@ -1,11 +1,11 @@
 # Releasing
 
-Releases are cut by pushing a tag. Nothing else is needed.
-
-```sh
-git tag v1.2.3
-git push origin v1.2.3
-```
+1. Check `ci` is green on `main` — the release build runs no tests.
+2. Tag: `git tag v1.2.3`. The `v` is required; a hyphen (`v1.3.0-rc1`)
+   makes it a pre-release.
+3. Push: `git push origin v1.2.3`. Nothing else is needed.
+4. Verify: `gh release view v1.2.3`, and once it lands,
+   `gh extension upgrade turn && gh turn --version`.
 
 The `release` workflow then:
 
@@ -19,10 +19,7 @@ Users pick it up with `gh extension upgrade turn`.
 
 ## Rules
 
-- Tags must start with `v`; anything else does not trigger the workflow.
-- A tag containing a hyphen (`v1.3.0-rc1`) is published as a pre-release,
-  which `gh extension upgrade` skips.
-- Tag from `main` once `ci` is green. The release build runs no tests.
+- `gh extension upgrade` skips pre-releases.
 - Re-pushing a tag re-uploads over the existing release assets, so a bad
   release can be fixed by deleting the tag, re-tagging and pushing again.
   Prefer a new patch version where the old one may already be installed.
